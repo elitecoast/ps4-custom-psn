@@ -10,37 +10,33 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v3
 
-    - name: Download Toolchain
+    - name: Download Toolchain (v0.5 Full)
       run: |
-        echo "Downloading Toolchain v0.5.2..."
-        # Use the filename confirmed to exist in the release assets
-        curl -fL -o toolchain.tar.gz https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.2/v0.5.2.tar.gz
+        echo "Downloading Toolchain v0.5..."
+        # v0.5 contains the full compiler suite (clang++), unlike v0.5.2
+        wget -q https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5/toolchain-linux.tar.gz
         
         echo "Extracting..."
-        mkdir toolchain_extract
-        tar -xzf toolchain.tar.gz -C toolchain_extract
+        tar -xzf toolchain-linux.tar.gz
         
-        # Smart Search: Find where the 'bin' folder ended up
-        TOOLCHAIN_ROOT=$(find toolchain_extract -type d -name "bin" | head -n 1 | xargs dirname)
-        echo "Toolchain found at: $TOOLCHAIN_ROOT"
-        
-        # Move to a fixed path for simplicity
-        mv "$TOOLCHAIN_ROOT" /home/runner/toolchain
+        # The v0.5 tarball extracts to a folder named 'toolchain'
+        mv toolchain /home/runner/toolchain
 
     - name: Compile Payload
       run: |
         export OO_PS4_TOOLCHAIN=/home/runner/toolchain
         
-        # Smart Search: Find the compiler executable (it might be in bin/linux/ or just bin/)
-        COMPILER=$(find $OO_PS4_TOOLCHAIN -name "clang++" | head -n 1)
+        # Smart Search: Find the compiler executable (it might be in bin/ or bin/linux/)
+        COMPILER=$(find $OO_PS4_TOOLCHAIN -name "clang++" -type f | head -n 1)
         
         if [ -z "$COMPILER" ]; then
           echo "❌ Error: clang++ not found in toolchain!"
-          # List files to help debug if it fails again
-          find $OO_PS4_TOOLCHAIN
+          # List bin directory for debugging
+          ls -R $OO_PS4_TOOLCHAIN/bin
           exit 1
         fi
-        echo "Using compiler: $COMPILER"
+        
+        echo "✅ Found compiler at: $COMPILER"
         
         # Find the source file in the repo
         SOURCE_FILE=$(find . -name "main.cpp" | head -n 1)
@@ -50,7 +46,7 @@ jobs:
           exit 1
         fi
         
-        echo "Compiling $SOURCE_FILE..."
+        echo "🔨 Compiling $SOURCE_FILE..."
         "$COMPILER" "$SOURCE_FILE" -o psn_replacement.elf \
           -target x86_64-scei-ps4 \
           -I$OO_PS4_TOOLCHAIN/include \
