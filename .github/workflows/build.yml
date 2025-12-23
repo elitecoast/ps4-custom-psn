@@ -10,35 +10,47 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v3
 
-    - name: Download Toolchain (v0.5 Full)
+    - name: Download Toolchain (v0.5)
       run: |
         echo "Downloading Toolchain v0.5..."
-        # v0.5 contains the full compiler suite (clang++), unlike v0.5.2
-        wget -q https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5/toolchain-linux.tar.gz
+        # Use curl with fail-fast (-f) and follow-redirects (-L)
+        # v0.5.tar.gz is the confirmed binary package for this release
+        curl -fL -o toolchain.tar.gz https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5/v0.5.tar.gz
         
         echo "Extracting..."
-        tar -xzf toolchain-linux.tar.gz
+        mkdir toolchain_extract
+        tar -xzf toolchain.tar.gz -C toolchain_extract
         
-        # The v0.5 tarball extracts to a folder named 'toolchain'
-        mv toolchain /home/runner/toolchain
+        # Smart Search: Find the 'bin' folder wherever it extracted
+        # (v0.5 usually extracts to a folder named 'toolchain')
+        TOOLCHAIN_ROOT=$(find toolchain_extract -type d -name "bin" | head -n 1 | xargs dirname)
+        
+        if [ -z "$TOOLCHAIN_ROOT" ]; then
+          echo "❌ Error: Could not find bin directory in extracted files."
+          find toolchain_extract -maxdepth 2
+          exit 1
+        fi
+        
+        echo "Found toolchain at: $TOOLCHAIN_ROOT"
+        mv "$TOOLCHAIN_ROOT" /home/runner/toolchain
 
     - name: Compile Payload
       run: |
         export OO_PS4_TOOLCHAIN=/home/runner/toolchain
         
-        # Smart Search: Find the compiler executable (it might be in bin/ or bin/linux/)
+        # Find the compiler executable
         COMPILER=$(find $OO_PS4_TOOLCHAIN -name "clang++" -type f | head -n 1)
         
         if [ -z "$COMPILER" ]; then
           echo "❌ Error: clang++ not found in toolchain!"
-          # List bin directory for debugging
           ls -R $OO_PS4_TOOLCHAIN/bin
           exit 1
         fi
         
-        echo "✅ Found compiler at: $COMPILER"
+        echo "✅ Using compiler: $COMPILER"
+        chmod +x "$COMPILER"
         
-        # Find the source file in the repo
+        # Find the source file
         SOURCE_FILE=$(find . -name "main.cpp" | head -n 1)
         
         if [ -z "$SOURCE_FILE" ]; then
