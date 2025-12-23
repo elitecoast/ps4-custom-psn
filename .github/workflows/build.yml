@@ -10,19 +10,39 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v3
 
-    - name: Download OpenOrbis Toolchain
+    - name: Download and Setup Toolchain
       run: |
-        echo "Downloading Toolchain..."
-        wget -q https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.2/toolchain-linux.tar.gz
+        echo "Downloading OpenOrbis Toolchain v0.5.1..."
+        # Use v0.5.1 Linux tarball which is known to work
+        wget -q https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.1/toolchain-linux.tar.gz
+        
+        echo "Extracting..."
         tar -xzf toolchain-linux.tar.gz
-        mv toolchain /home/runner/toolchain
+        
+        # Smart Search: Find the 'bin' folder wherever it extracted
+        TOOLCHAIN_PATH=$(find . -type d -name "bin" | head -n 1 | xargs dirname)
+        echo "Found toolchain at: $TOOLCHAIN_PATH"
+        
+        # Move it to a standard location
+        mv "$TOOLCHAIN_PATH" /home/runner/toolchain
 
     - name: Compile Payload
       run: |
         export OO_PS4_TOOLCHAIN=/home/runner/toolchain
         
-        echo "Compiling..."
-        $OO_PS4_TOOLCHAIN/bin/clang++ main.cpp -o psn_replacement.elf \
+        # Smart Search: Find main.cpp wherever you uploaded it
+        SOURCE_FILE=$(find . -name "main.cpp" | head -n 1)
+        
+        if [ -z "$SOURCE_FILE" ]; then
+          echo "❌ Error: main.cpp not found in the repository!"
+          find . -maxdepth 3 # Print file list for debugging
+          exit 1
+        fi
+        
+        echo "🔨 Compiling $SOURCE_FILE..."
+        
+        # Compile using the toolchain
+        $OO_PS4_TOOLCHAIN/bin/clang++ "$SOURCE_FILE" -o psn_replacement.elf \
           -target x86_64-scei-ps4 \
           -I$OO_PS4_TOOLCHAIN/include \
           -L$OO_PS4_TOOLCHAIN/lib \
