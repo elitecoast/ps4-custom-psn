@@ -1,42 +1,47 @@
-❌ Error: clang++ not found in toolchain!
-/home/runner/toolchain/bin:
-data
-linux
-macos
-windows
+name: Build PS4 Payload
 
-/home/runner/toolchain/bin/data:
-icon0.png
-modules
-param.sfo
-pic0.png
-right.sprx
-template.gp4
-template.xml
+on:
+  push:
+  workflow_dispatch:
 
-/home/runner/toolchain/bin/data/modules:
-libSceFios2.prx
-libc.prx
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Use the official OpenOrbis Docker container which has the toolchain pre-installed
+    container: openorbis/toolchain:latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
 
-/home/runner/toolchain/bin/linux:
-LIBORBIS-LICENSE.txt
-PkgTool.Core
-create-eboot
-create-lib
-readelf
+    - name: Compile Payload
+      run: |
+        # The toolchain is already installed in the container
+        # Usually at /opt/openorbis or defined by $OO_PS4_TOOLCHAIN
+        if [ -z "$OO_PS4_TOOLCHAIN" ]; then
+          export OO_PS4_TOOLCHAIN=/opt/openorbis
+        fi
+        
+        echo "Using Toolchain at: $OO_PS4_TOOLCHAIN"
+        
+        # Find the source file
+        SOURCE_FILE=$(find . -name "main.cpp" | head -n 1)
+        if [ -z "$SOURCE_FILE" ]; then
+          echo "❌ Error: main.cpp not found in repo!"
+          exit 1
+        fi
+        
+        echo "🔨 Compiling $SOURCE_FILE..."
+        $OO_PS4_TOOLCHAIN/bin/clang++ "$SOURCE_FILE" -o psn_replacement.elf \
+          -target x86_64-scei-ps4 \
+          -I$OO_PS4_TOOLCHAIN/include \
+          -L$OO_PS4_TOOLCHAIN/lib \
+          -O2 -std=c++11 \
+          -lSceNet -lSceUserService -lSceSystemService \
+          -Wl,--gc-sections
 
-/home/runner/toolchain/bin/macos:
-LIBORBIS-LICENSE.txt
-PkgTool.Core
-create-eboot
-create-lib
-readelf
-
-/home/runner/toolchain/bin/windows:
-LIBORBIS-LICENSE.txt
-LibOrbisPkg.dll
-PkgEditor.exe
-create-eboot.exe
-create-lib.exe
-readelf.exe
-Error: Process completed with exit code 1.
+    - name: Upload ELF Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ps4-payload
+        path: psn_replacement.elf
