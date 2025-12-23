@@ -1,4 +1,4 @@
-     name: Build PS4 Payload
+name: Build PS4 Payload
 
 on:
   push:
