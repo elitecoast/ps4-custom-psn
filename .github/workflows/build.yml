@@ -10,39 +10,48 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v3
 
-    - name: Download and Setup Toolchain
+    - name: Download Toolchain
       run: |
-        echo "Downloading OpenOrbis Toolchain v0.5.1..."
-        # Use v0.5.1 Linux tarball which is known to work
-        wget -q https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.1/toolchain-linux.tar.gz
+        echo "Downloading Toolchain v0.5.2..."
+        # Use the filename confirmed to exist in the release assets
+        curl -fL -o toolchain.tar.gz https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.2/v0.5.2.tar.gz
         
         echo "Extracting..."
-        tar -xzf toolchain-linux.tar.gz
+        mkdir toolchain_extract
+        tar -xzf toolchain.tar.gz -C toolchain_extract
         
-        # Smart Search: Find the 'bin' folder wherever it extracted
-        TOOLCHAIN_PATH=$(find . -type d -name "bin" | head -n 1 | xargs dirname)
-        echo "Found toolchain at: $TOOLCHAIN_PATH"
+        # Smart Search: Find where the 'bin' folder ended up
+        TOOLCHAIN_ROOT=$(find toolchain_extract -type d -name "bin" | head -n 1 | xargs dirname)
+        echo "Toolchain found at: $TOOLCHAIN_ROOT"
         
-        # Move it to a standard location
-        mv "$TOOLCHAIN_PATH" /home/runner/toolchain
+        # Move to a fixed path for simplicity
+        mv "$TOOLCHAIN_ROOT" /home/runner/toolchain
 
     - name: Compile Payload
       run: |
         export OO_PS4_TOOLCHAIN=/home/runner/toolchain
         
-        # Smart Search: Find main.cpp wherever you uploaded it
+        # Smart Search: Find the compiler executable (it might be in bin/linux/ or just bin/)
+        COMPILER=$(find $OO_PS4_TOOLCHAIN -name "clang++" | head -n 1)
+        
+        if [ -z "$COMPILER" ]; then
+          echo "❌ Error: clang++ not found in toolchain!"
+          # List files to help debug if it fails again
+          find $OO_PS4_TOOLCHAIN
+          exit 1
+        fi
+        echo "Using compiler: $COMPILER"
+        
+        # Find the source file in the repo
         SOURCE_FILE=$(find . -name "main.cpp" | head -n 1)
         
         if [ -z "$SOURCE_FILE" ]; then
-          echo "❌ Error: main.cpp not found in the repository!"
-          find . -maxdepth 3 # Print file list for debugging
+          echo "❌ Error: main.cpp not found in repo!"
           exit 1
         fi
         
-        echo "🔨 Compiling $SOURCE_FILE..."
-        
-        # Compile using the toolchain
-        $OO_PS4_TOOLCHAIN/bin/clang++ "$SOURCE_FILE" -o psn_replacement.elf \
+        echo "Compiling $SOURCE_FILE..."
+        "$COMPILER" "$SOURCE_FILE" -o psn_replacement.elf \
           -target x86_64-scei-ps4 \
           -I$OO_PS4_TOOLCHAIN/include \
           -L$OO_PS4_TOOLCHAIN/lib \
